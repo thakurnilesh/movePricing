@@ -110,7 +110,7 @@ HLC_INDEX = 32;
 OVERRIDE_TERM_INDEX = 33;
 LSIT_PRICE_OVERRIDE_INDEX = 42;
 OVERRIDER_CONTRACT_TERM_INDEX = 34;
-MANUAL_DISCOUNT_AMOUNT_INDEX = 36; // CRM: 1090
+MANUAL_DISCOUNT_AMOUNT_INDEX = 36; // Replaced the variable MANUAL_DISCOUNT_TYPE_INDEX with MANUAL_DISCOUNT_AMOUNT_INDEX as 36 is for discount amount and not for type CRM: 1090
 MANUAL_DISCOUNT_TYPE_INDEX = 37; // CRM: 1090
 ASSET_PRICE_EFFECTIVE_DATE_INDEX = 38;
 NEXT_CHARGE_DATE_INDEX = 43;
@@ -140,6 +140,7 @@ resetAppliedPromoQuote = "";
 lineItemsCount = 0;
 totalOverrideDelta = 0.0;
 advantageOverrideDelta = 0.0;
+advantagelinediscount = 0.0;
 isEligibleForSpecialApproval = false;
 isBDXQuote = false;
 thresholdSet = bmql("select Part_Number,Threshold_Value,Active from Market_Threshold");
@@ -949,7 +950,7 @@ for line in transactionLine {
 					if(assetArray[MANUAL_DISCOUNT_AMOUNT_INDEX] <> "" AND isNumber(assetArray[MANUAL_DISCOUNT_AMOUNT_INDEX])) // CRM:1090
 					{
 						
-						assetDicscount = atof(assetArray[MANUAL_DISCOUNT_AMOUNT_INDEX]);
+						assetDicscount = atof(assetArray[MANUAL_DISCOUNT_AMOUNT_INDEX]); // CRM:1090
 						//if(assetDicscount < 0){
 						//	assetDicscount=assetDicscount*-1;
 						//}
@@ -1130,7 +1131,6 @@ for line in transactionLine {
 			selectedPartArr = split(line.pricingStringForAdvantage_line,"$$");
 			// Added To check is Showcase To advantage : CRM 1526
 			isAdvantageCapped=(sizeofarray(selectedPartArr)==6);
-			print isAdvantageCapped;
 			// END CRM 1526
 			if(sizeofarray(selectedPartArr) > 2 ){
 				/*if(line.billingPeriod_line=="Monthly" AND isnumber(selectedPartArr[1])){
@@ -1797,6 +1797,12 @@ for line in transactionLine {
 			if(overrideDelta < 0){
 				overrideDelta = overrideDelta*-1;
 			}
+			//Added as part of CRM 1933
+			if(partNumber == "ADVANTAGE" AND isSpecialAdvantage == true)
+			{
+				advantageOverrideDelta = advantageOverrideDelta + overrideDelta;
+			}
+			//End of Added as part of CRM 1933
 			totalOverrideDelta = totalOverrideDelta + overrideDelta;
 		}
 		if(lineType == "add" OR lineType == "renew")
@@ -1805,7 +1811,13 @@ for line in transactionLine {
 			if(partNumber == "ADVANTAGE" AND suppressAMLCPPLOverrideApproval_quote == false)
 			{
 				overrideDelta = (listPrice - originalListPriceForDelta)*totalBillingTerms*qty;
-			}
+				//Added as part of CRM 1933
+			    if(partNumber == "ADVANTAGE" AND isSpecialAdvantage == true)
+				{
+					advantageOverrideDelta = advantageOverrideDelta + overrideDelta;
+				}	
+				//End of Added as part of CRM 1933
+			}		
 			if(partNumber == "SHOWCASE" AND supressHLCapproval_quote == false)
 			{
 				overrideDelta = (listPrice - originalListPriceForDelta)*totalBillingTerms*qty;
@@ -1816,8 +1828,8 @@ for line in transactionLine {
 		
 			//CRM-846
 			if(isSpecialAdvantage == true){
-			print "isSpecialAdvantage";
-				advantageOverrideDelta = advantageOverrideDelta + overrideDelta;
+				//advantageOverrideDelta = advantageOverrideDelta + overrideDelta;//Commented as part of CRM 1933
+				advantagelinediscount = advantagelinediscount + line.totalDiscount2_line;//Added as part of CRM 1933
 			}
 			// Dont Add any overrride Delta amount in totalOverrideDelta  to block approval: CRM 1526
 			if(isAdvantageCapped){
@@ -1982,7 +1994,7 @@ for line in transactionLine {
 											if((promoCode == assetArray[PROMOTION_INDEX])){
 												if(containsKey(promoApplicationdct, currentPromo+"@DiscountPercent") AND isNumber(get(promoApplicationdct, currentPromo+"@DiscountPercent"))){
 													discountPercent = atof(get(promoApplicationdct,currentPromo+"@DiscountPercent"));
-												}elif(assetArray[MANUAL_DISCOUNT_AMOUNT_INDEX] <> "" AND isNumber(assetArray[MANUAL_DISCOUNT_AMOUNT_INDEX])){
+												}elif(assetArray[MANUAL_DISCOUNT_AMOUNT_INDEX] <> "" AND isNumber(assetArray[MANUAL_DISCOUNT_AMOUNT_INDEX])){ 
 													discountPercent = atof(assetArray[MANUAL_DISCOUNT_AMOUNT_INDEX]);
 												}else{
 													discountPercent = 0;
@@ -2044,7 +2056,6 @@ for line in transactionLine {
                                 if(line._part_number == "ADVANTAGE" AND lower(accountType) == "broker" AND (lower(trim(franchise)) == "century 21" OR lower(franchise) == "c21")){
 									discountPercent = getFloat(eachPromo,"DiscountPercent");
 									eligiblePromotionString = eligiblePromotionString + promoCode + promoDelim + string(round(discountPercent,2)) + promoDelim + documentNumber + menuItemDelim ;
-									print eligiblePromotionString;
 									
 								}
 							}
@@ -2098,7 +2109,6 @@ for line in transactionLine {
 											
 										}
 									elif((promoCode == "ADVANTAGECAPPEDPRICE" AND line.hidePromoFlag_line == false )){
-									print promoDelim;
 									eligiblePromotionString = eligiblePromotionString + promoCode + promoDelim + string(round(discountPercent,2)) + promoDelim + documentNumber + menuItemDelim ;
 									}
 									tempPromoPercentageForRenewal = discountPercent;
@@ -2274,8 +2284,6 @@ for line in transactionLine {
 		}elif(containsKey(appliedPromotionDict,atoi(documentNumber)) and applied <> ""){
 			resetAppliedPromoQuote = resetAppliedPromoQuote + documentNumber + ".!." + get(appliedPromotionDict,atoi(documentNumber)) + "!!!";
 		}
-		print "applied ";
-		print applied ;
 		if(documentNumber<>"1"){
 			promotionDiscount = 0.0;
 			if(NOT isnull(applied) AND applied<>""){
@@ -2917,7 +2925,15 @@ if(descriptionString <> "")
 	approverLevels = range(6);
 	approverPosition = "";
 	approvalLimitDatatable = 0;
-	approvalLimit = totalLineItemDiscounts_quote + lostRevenue + totalCredits_quote + totalOverrideDelta;//refundRequestedTotal_quote;
+	////Added as part of CRM 1933
+	discounts = totalLineItemDiscounts_quote;
+	if (isEligibleForSpecialApproval == true)
+	{
+		totalOverrideDelta = totalOverrideDelta - advantageOverrideDelta;
+		discounts = discounts - advantagelinediscount;
+	}
+	approvalLimit = discounts + lostRevenue + totalCredits_quote + totalOverrideDelta;//refundRequestedTotal_quote;
+	//End of Added as part of CRM 1933
 	/*if(approvalLimit < 0)
 	{
 		approvalLimit = approvalLimit * -1;//LEAP-8117
@@ -3079,14 +3095,31 @@ if(restrictedProducts)
 levelString = levelString + "^_^" + specialLevelString + "^_^" + productExclusionLevel + "^_^" + financeLevel;
 userNames = userNames + "^_^" + specialApproverString + "^_^" + productExclusionGrp + "^_^" + financeUserName;
 descriptionString = descriptionString + "^_^" + specialDescriptionString + "^_^" + financeDescriptionString;
-
+//Added below code for CRM-1933
+if(isEligibleForSpecialApproval ){
+	levelString = "L0$"+levelString;
+	userNames = "jevinchase$"+userNames;
+	descriptionString = "Approval Required for Special Advantage pricing$" + descriptionString;
+}
+//End of Added below code for CRM-1933
 approverString = levelString + "#" + userNames;
 
-//CRM-846
-if(isEligibleForSpecialApproval AND approverString == "^_^^_^^_^#^_^^_^^_^"){
-	approverString = "L1^_^^_^^_^#jevinchase^_^^_^^_^";
-	descriptionString = "Approval Required for Special Advantage pricing"+"^_^"+"^_^";
-}
+//CRM-846 CRM-1933 Commented below
+/*if(isEligibleForSpecialApproval ){
+	if (approverString == "^_^^_^^_^#^_^^_^^_^")
+	{
+		//approverString = "L0^_^^_^^_^#jevinchase^_^^_^^_^";
+		descriptionString = "Approval Required for Special Advantage pricing"+"^_^"+"^_^";
+	}
+	else
+	{
+		approverString = "L0$"+approverString;
+		approverStringarray = split(approverString,"^_^^_^^_");
+		approverString = approverStringarray[0]+"^_^^_^^_^#jevinchase$"+approverStringarray[1];
+		descriptionString = descriptionString + "Approval Required for Special Advantage pricing"+"^_^"+"^_^";
+	}
+	//descriptionString = "Approval Required for Special Advantage pricing"+"^_^"+"^_^";
+}*/
 
 if((linesHasAssetId AND quoteType_temp == "New") OR (quoteType_temp == "Modify" AND quoteType_quote == "Auto-Renew"))
 {
