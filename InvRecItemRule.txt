@@ -1,0 +1,101 @@
+ret = recItemsString;
+uniqDependentPartsArr = string[];
+commentDict = dict("string");
+dependantPartsDict = dict("string[]"); 
+dependantPartsRecItems = "";
+partsDataDict = dict("string");
+uniqParentPartArr = string[];
+// javascript prepares the string
+productNameLookupQuery = bmql("SELECT part_number, custom_field1, custom_field4, custom_field30,custom_field17 FROM _parts");
+for row in productNameLookupQuery {
+	part_number = get(row, "part_number");
+	key = get(row, "custom_field30");
+	parentParts = get(row, "custom_field4");
+	contractTerm = get(row, "custom_field17");
+	pricingMethod = get(row, "custom_field1");
+	if(key <> "" AND part_number <> ""){				
+		ret = replace(ret, key, part_number);
+	}	
+	if( parentParts <> "" ){		
+		parentPartArr = split(parentParts, ",");
+		for eachParent in parentPartArr{
+			dependentPartsArr = string[];
+			if( containsKey(dependantPartsDict, eachParent) ){
+				dependentPartsArr = get(dependantPartsDict, eachParent);				
+			}
+			append(dependentPartsArr, part_number);
+			put(dependantPartsDict, eachParent, dependentPartsArr);
+		}
+	}
+	put(partsDataDict,part_number+"contractTerm",contractTerm);
+	put(partsDataDict,part_number+"PricingMethod",pricingMethod);
+}
+billingPeriod = "";
+billingPeriodQuery = bmql("select billingPreference_quote from commerce.transaction");
+for each in billingPeriodQuery{
+	billingPeriod = get(each,"billingPreference_quote");
+}
+print dependantPartsDict;
+recItemsArr = split(ret, "*^*");
+dependentPartIndx = 1;
+for eachItem in recItemsArr{
+	if( eachItem <> "" ){
+		recItemInfoArr = split(eachItem, "*$$*");
+		parentPart = recItemInfoArr[0];
+		parentQty = recItemInfoArr[1];
+		if(isNull(parentQty) OR NOT isNumber(parentQty)){
+			parentQty = "0";
+		}
+		comments = recItemInfoArr[2];
+		commentInfoArr = split(comments,"^_^");
+		costPerAction = commentInfoArr[23];//make sure to maintain all the columns in same order for State, County, city and postalcode
+		if(isNull(costPerAction) OR NOT isNumber(costPerAction)){
+			costPerAction = "0.0";
+		}
+		if(  containsKey(dependantPartsDict, parentPart) ){//findinarray(uniqParentPartArr, parentPart) == -1 AND
+			dependentParts = get(dependantPartsDict, parentPart);
+			leadQty = 50 ;
+			for dep_part in dependentParts{
+				if(dep_part == "HSMARKETSPND"){
+					listPrice = atof(costPerAction) * leadQty * atoi(parentQty);
+				}elif(dep_part == "HSSETUPFEE" OR dep_part == "HLSETUPFEE"){
+					PricingDict = dict("string");
+					qty = 1;
+					termForPrice = "";
+					pricingMethod = "";
+					if(containsKey(partsDataDict,dep_part+"contractTerm") AND containsKey(partsDataDict,dep_part+"PricingMethod")){
+						termForPrice = get(partsDataDict,dep_part+"contractTerm");
+						pricingMethod = get(partsDataDict,dep_part+"PricingMethod");
+					}
+					NarMembership = "YES";
+					ProductType = commentInfoArr[8];
+					leadType = commentInfoArr[9];
+					PriceTier = commentInfoArr[14];
+					EffDate = datetostr(getdate(), "yyyyMMdd");
+					
+					put(PricingDict,"PartNumber",dep_part);
+					put(PricingDict,"quantity",string(qty));
+					put(PricingDict,"BillingPeriod",billingPeriod);
+					put(PricingDict,"ContractTerm",termForPrice);
+					put(PricingDict,"PriceTier",PriceTier);
+					put(PricingDict,"ProductType",ProductType);
+					put(PricingDict,"HLCvalue","");
+					put(PricingDict,"LicenseValue","");
+					put(PricingDict,"NarMembership",NarMembership);
+					put(PricingDict,"LeadType",leadType);
+
+					listPrice = util.getListPrice(PricingDict,pricingMethod,EffDate);
+				}else{
+					listPrice = 0;
+				}
+				dependantPartsRecItems = dependantPartsRecItems + "|^|" + dep_part + "~1~" + comments + "~" + string(listPrice) + "~" + parentPart+string(dependentPartIndx);
+				dependentPartIndx = dependentPartIndx + 1;
+			}
+			append(uniqParentPartArr, parentPart);
+		}
+	}	
+}
+
+ret = replace(ret, "*^*", "|^|");
+ret = replace(ret, "*$$*", "~");
+return ret+dependantPartsRecItems;
