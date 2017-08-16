@@ -917,9 +917,9 @@ for line in transactionLine {
 				
 				// CRM:1090
 			   //billingPeriod = "Monthly";
-			   billingPeriod=assetArray[BILLING_PERIOD_INDEX];
-			   if (quoteType_temp <> "Auto-Renew")
+			   if (quoteType_temp <> "Auto-Renew" and lineType == "renew")
 			   {
+				   billingPeriod=assetArray[BILLING_PERIOD_INDEX];
 				   if(billingPeriod <> "Monthly"){
 					   if(contractTerm == 12){
 							billingPeriod = "Annual";
@@ -931,8 +931,8 @@ for line in transactionLine {
 							billingPeriod = "Monthly";
 					   }
 				   }
+				   lineRes = lineRes + documentNumber + "~billingPeriod_line~" + billingPeriod + "|";
 			   }
-			  lineRes = lineRes + documentNumber + "~billingPeriod_line~" + billingPeriod + "|";
 			  // clear override term for non inventory renewals			  
 			  if(line._part_custom_field13=="false"){
 			  lineRes = lineRes + documentNumber + "~overrideTerm_line~0|";
@@ -1845,7 +1845,8 @@ for line in transactionLine {
 			isGrandFatherPriceEligible = true;
 			lineDetailsDict = Dict("string");
 			put(lineDetailsDict,"priceType",line._part_custom_field8);
-			put(lineDetailsDict,"listBillingPeriod",line.billingPeriod_line);
+			//put(lineDetailsDict,"listBillingPeriod",line.billingPeriod_line); //Commented as part of CRM-1090
+			put(lineDetailsDict,"listBillingPeriod",billingPeriod); //Added as part of CRM-1090
 			if(line.listPriceOverride_line <> 0){
 				put(lineDetailsDict,"listPrice",String(line.listPriceOverride_line));
 			}else{
@@ -2748,6 +2749,7 @@ for line in transactionLine {
 		accountType = accountType_quote;
 		promoCode = "";
 		splitBillAmt = 0.0;
+				   
 		StrategicDiscountSet = bmql("select AccountType,PromoCode, SplitBillAmount, DiscountPercent, DiscountAmt from StrategicDiscount where (AccountType = $All or AccountType = $accountType) and PartNumber=$partNumber and (ProductType=$productType or ProductType=$any) and Franchise=$franchise and DateFrom<=$EffDateInt and DateTo>=$EffDateInt");
 		/*print "StrategicDiscountSet";
 		print StrategicDiscountSet;*/
@@ -2920,6 +2922,11 @@ if(quoteType_temp <> "Backout" AND NOT(cancellationFlag) AND NOT(isBDXQuote))//C
 
 firstLevelApprover = false;
 systemAdminApprovalRequired = false;
+//Added by Ravi CRM-2062
+if(descriptionString == "")
+{
+	result = result + "1~totalAmountForApprovals~"+string(0.0)+"|"; //Added by Ravi CRM-2062
+}
 if(descriptionString <> "")
 {
 	approverLevels = range(6);
@@ -2933,6 +2940,7 @@ if(descriptionString <> "")
 		discounts = discounts - advantagelinediscount;
 	}
 	approvalLimit = discounts + lostRevenue + totalCredits_quote + totalOverrideDelta;//refundRequestedTotal_quote;
+	result = result + "1~totalAmountForApprovals~"+string(approvalLimit)+"|"; //Added by Ravi CRM-2062 
 	//End of Added as part of CRM 1933
 	/*if(approvalLimit < 0)
 	{
@@ -3070,6 +3078,22 @@ for eachLevel in financeApproverLevels
 				financeUserName = financeUserName + approver;
 				financeLevelNo = financeLevelNo + 1;
 			}
+			//Added for CRM 2032 for Credit Check
+			elif((find(descriptionString, "Approval Required for Credit Check") <> -1) and approvalLimitForFinanceDatatable < totalForCreditCheck)
+			{
+				approvalLimitForFinanceDatatable = getfloat(eachApprover,"approvalLimit");
+				financePosition = get(eachApprover,"ParentPosition");
+				approver = get(eachApprover,"UserName");
+				if(financeLevel <> "")
+				{
+					financeLevel = financeLevel + "$";
+					financeUserName = financeUserName + "$";
+				}
+				financeLevel = financeLevel + "FinanceApprovalLevel" + string(financeLevelNo);
+				financeUserName = financeUserName + approver;
+				financeLevelNo = financeLevelNo + 1;	
+			}
+			//End of Added for CRM 2032 for Credit Check
 			else
 			{
 				break;
@@ -3097,8 +3121,10 @@ userNames = userNames + "^_^" + specialApproverString + "^_^" + productExclusion
 descriptionString = descriptionString + "^_^" + specialDescriptionString + "^_^" + financeDescriptionString;
 //Added below code for CRM-1933
 if(isEligibleForSpecialApproval ){
-	levelString = "L0$"+levelString;
-	userNames = "jevinchase$"+userNames;
+	if(find(userNames , "jevinchase") == -1){
+		levelString = "L0$"+levelString;
+		userNames = "jevinchase$"+userNames;
+	}
 	descriptionString = "Approval Required for Special Advantage pricing$" + descriptionString;
 }
 //End of Added below code for CRM-1933
