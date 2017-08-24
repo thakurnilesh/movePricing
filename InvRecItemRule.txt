@@ -85,7 +85,9 @@ for eachItem in recItemsArr{
 					put(PricingDict,"LeadType",leadType);
 
 					listPrice = util.getListPrice(PricingDict,pricingMethod,EffDate);
-				}else{
+				}
+				else
+				{
 					listPrice = 0;
 				}
 				dependantPartsRecItems = dependantPartsRecItems + "|^|" + dep_part + "~1~" + comments + "~" + string(listPrice) + "~" + parentPart+string(dependentPartIndx);
