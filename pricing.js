@@ -1,8 +1,6 @@
 result = "";
 debug = false;
-												
-						
-				
+isAdvantageCapped=false; // CRM-1526
 nonUsageProductExists = false;//Kamal for CfS Broker
 start_time = getcurrenttimeinmillis();
 priceWithinPolicyFlag = true;
@@ -665,13 +663,13 @@ for line in transactionLine {
 	overrideDelta = 0.0;
 	isSpecialAdvantage = false;
 	isGrandFatherPriceEligible = false;
-
+    previouseLineType = "";//CRM-1090
 
 	marketKey = "";
 	if(line.assetDetails_line <> "")
 	{
 		assetArray 	= split(line.assetDetails_line, FIELD_DELIM);
-
+        previouseLineType = getoldvalue("lineType_line",atoi(documentNumber)); //CRM-1090
 		marketKey = assetArray[MARKET_KEY_INDEX];
 	}
 	//print dependantPart;
@@ -868,6 +866,7 @@ for line in transactionLine {
 			}
         }
 		listPrice = 0;
+		advCappedDiscount=0.0; // CRM-1526
 		grandFatherDiscount = 0.0;					
 		netPriceEa = 0;
 		netPriceEach = 0;
@@ -1094,7 +1093,7 @@ for line in transactionLine {
 		if(line._part_number == "ADVANTAGE" AND line.pricingStringForAdvantage_line <> ""){
 			selectedPartArr = split(line.pricingStringForAdvantage_line,"$$");
 														
-													   
+			isAdvantageCapped=(sizeofarray(selectedPartArr)>=6); // CRM-1526								   
 				  
 			if(sizeofarray(selectedPartArr) > 2){
 				/*if(line.billingPeriod_line=="Monthly" AND isnumber(selectedPartArr[1])){
@@ -1109,6 +1108,9 @@ for line in transactionLine {
 				if(line.billingPeriod_line=="Monthly" AND isnumber(selectedPartArr[1]))
 				{
 					listPrice = atof(selectedPartArr[1]);
+					if(isAdvantageCapped){ // CRM-1526
+						advCappedDiscount= round(((listprice - atof(selectedPartArr[6]))/listprice)*100,4);
+					}
 					if(isNull(selectedPartArr[3]) == false)
 					{
 						originalListPriceForDelta = atof(selectedPartArr[3]);
@@ -1117,6 +1119,9 @@ for line in transactionLine {
 				elif(containsKey(billingPeriodDivisorDict,line.billingPeriod_line))
 				{
 					listPrice = atof(selectedPartArr[2]) * get(billingPeriodDivisorDict,line.billingPeriod_line);
+					if(isAdvantageCapped){ // CRM-1526
+						advCappedDiscount= round(((listprice - (atof(selectedPartArr[7])*get(billingPeriodDivisorDict,line.billingPeriod_line)))/listprice)*100,4);
+					}
 					if(isNull(selectedPartArr[3]) == false)
 					{
 						originalListPriceForDelta = atof(selectedPartArr[4]) * get(billingPeriodDivisorDict,line.billingPeriod_line);
@@ -1798,11 +1803,14 @@ for line in transactionLine {
 				//advantageOverrideDelta = advantageOverrideDelta + overrideDelta;//Commented as part of CRM 1933
 				advantagelinediscount = advantagelinediscount + line.totalDiscount2_line;//Added as part of CRM 1933
 			}
-																							
-						 
-							
-					 
-	
+			//CRM-1526 : Start																				
+			if(isAdvantageCapped){			
+				overrideDelta=0.0;
+			}
+			//else{
+				//totalOverrideDelta = totalOverrideDelta + overrideDelta;
+			//}
+			// CRM-1526 : End	
 		
 			totalOverrideDelta = totalOverrideDelta + overrideDelta;
 	
@@ -1856,7 +1864,7 @@ for line in transactionLine {
                 {
                     tempLineAction = "ALL";
                 }
-                elif(tempLineAction == "add")
+                elif(tempLineAction == "add" AND promoCode <> "ADVANTAGECAPPEDPRICE")
                 {
                     tempLineAction = "add$amend$credit";
                 }
@@ -2086,9 +2094,21 @@ for line in transactionLine {
 												discountPercent = line.override_line;
 											}
 											}
-																						   
-									eligiblePromotionString = eligiblePromotionString + promoCode + promoDelim + string(round(discountPercent,2)) + promoDelim + documentNumber + menuItemDelim ;
-		  
+									if((promoCode <> "ADVANTAGECAPPEDPRICE" ) ){ // CRM-1526 : Start					
+											eligiblePromotionString = eligiblePromotionString + promoCode + promoDelim + string(round(discountPercent,2)) + promoDelim + documentNumber + menuItemDelim ;
+									}
+									elif((promoCode == "ADVANTAGECAPPEDPRICE" AND line.hidePromoFlag_line == false )){
+									//eligiblePromotionString = eligiblePromotionString + promoCode + promoDelim + string(round(discountPercent,2)) + promoDelim + documentNumber + menuItemDelim ;
+										if(advCappedDiscount <> 0.0) {
+											eligiblePromotionString = eligiblePromotionString + promoCode + promoDelim + string(round(advCappedDiscount,2)) + promoDelim + documentNumber + menuItemDelim ;
+											if(NOT(containsKey(appliedPromotionDict, atoi(documentNumber))) AND lineType == "add"){
+												put(appliedPromotionDict,atoi(documentNumber),promoCode);
+												lineRes = lineRes + documentNumber + "~override_line~" + string(round(advCappedDiscount,2)) + "|";
+											}
+										}
+									}												   
+									//eligiblePromotionString = eligiblePromotionString + promoCode + promoDelim + string(round(discountPercent,2)) + promoDelim + documentNumber + menuItemDelim ;
+									// CRM-1526 : End		  
 									tempPromoPercentageForRenewal = discountPercent;
 									tempPromoCodeForRenewal = promoCode;
 									if(isnumber(tempStartDate)){
@@ -2251,7 +2271,7 @@ for line in transactionLine {
 		appliedApproval = false;
 		applied = "";
 		if(containsKey(AppliedPromotionDict, atoi(documentNumber))){
-			promoInAppliedQuoteString = get(AppliedPromotionDict, atoi(documentNumber));
+			promoInAppliedQuoteString = get(AppliedPromotionDict, atoi(documentNumber));			
 			if(findinarray(uniquePromosArray,promoInAppliedQuoteString) <> -1){
 				applied = promoInAppliedQuoteString;
 			}elif(_system_current_step_var=="start_step" OR _system_current_step_var=="pending_process"){
@@ -2279,7 +2299,9 @@ for line in transactionLine {
 			if(NOT isnull(applied) AND applied<>""){
 				if( containsKey(promoApplicationdct, applied+"@DiscountPercent") AND isNumber(get(promoApplicationdct, applied+"@DiscountPercent") )){
 					promotionDiscount = atof(get(promoApplicationdct,applied+"@DiscountPercent"));
-					
+					if(applied == "ADVANTAGECAPPEDPRICE"){ // CRM-1526 : Start
+						promotionDiscount = advCappedDiscount;						
+					}// CRM-1526 : End
 					// Added below 3 lines for auto renewals
 					if(quoteType_temp == "Auto-Renew"){
 						promotionDiscount = line.override_line;
