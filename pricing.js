@@ -731,8 +731,11 @@ for line in transactionLine {
 		todayDateTimeStr = getstrdate();
 		todayDateStr = split(todayDateTimeStr," ");
 		lineAddedDateStr = substring(line.createdDate_l, 0, find(line.createdDate_l, " "));	
-
-
+        oldLineType = line.oldLineType_line; 
+		
+		if((isNull(oldLineType) OR oldLineType == "") AND line.assetDetails_line <> "" AND previouseLineType <> "" AND previouseLineType <> "add"){
+            oldLineType = lineType;
+		} // CRM:1090 : End
 
 
 
@@ -1864,7 +1867,7 @@ for line in transactionLine {
                 {
                     tempLineAction = "ALL";
                 }
-                elif(tempLineAction == "add" AND promoCode <> "ADVANTAGECAPPEDPRICE")
+                elif(tempLineAction == "add" AND promoCode <> "ADVANTAGECAPPEDPRICE") // CRM-1526
                 {
                     tempLineAction = "add$amend$credit";
                 }
@@ -2750,6 +2753,35 @@ for line in transactionLine {
 		}
 		lineRes = lineRes + documentNumber + "~assetStructure_line~" + assetStructure + "|";
 						  //+ documentNumber + "~allowedContractTerm_line~" + contrctTermAllowed + "|";
+		
+		//CRM-1090 Start 
+		if(linetype == "renew" and linetype <> oldlinetype){
+		   lineRes = lineRes + documentNumber + "~override_line~" + "0.0" + "|"; 
+		   lineRes = lineRes + documentNumber + "~listPriceOverride_line~" + "|";
+		   lineRes = lineRes + documentNumber + "~overrideTerm_line~" + "0" +"|";	
+		   if (quoteType_temp <> "Auto-Renew" and lineType == "renew")
+			   {	   
+		   billingPeriod=assetArray[BILLING_PERIOD_INDEX];
+				   if(billingPeriod <> "Monthly"){
+					   if(contractTerm == 12){
+							billingPeriod = "Annual";
+					   }elif(contractTerm == 6){
+							billingPeriod = "Bi-Annual";
+					   }elif(contractTerm == 3){
+							billingPeriod = "Quarterly";
+					   }else{
+							billingPeriod = "Monthly";
+					   }
+				  }
+		   lineRes = lineRes + documentNumber + "~billingPeriod_line~" + billingPeriod + "|";
+		   }
+		   if(isGrandFatherPriceEligible == true )
+			{
+			  lineRes = lineRes + documentNumber + "~eligiblePromotions_line~" + "|";
+			}
+		   
+		}
+		//CRM-1090 Ends
 	}
 	
 	//Strategic Discount
