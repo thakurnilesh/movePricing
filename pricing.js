@@ -739,7 +739,25 @@ for line in transactionLine {
 		todayDateStr = split(todayDateTimeStr," ");
 		lineAddedDateStr = substring(line.createdDate_l, 0, find(line.createdDate_l, " "));	
         oldLineType = line.oldLineType_line; 
-		
+		print("Test555");
+		//CRM-1090 Reset Call
+		if(linetype == "renew" and linetype <> oldlinetype AND  quoteType_temp <> "Auto-Renew"){
+			fields = string[][];
+			fields[0][0] = "quoteNumber_quote";
+			fields[0][1] = quoteNumber_quote;
+			updateQuery = util.generateSOAPUpdateTransactionQuery(_system_buyside_id, _system_user_session_id, fields, _system_supplier_company_name, "attributeReset");
+			executeQuery = util.executeSOAPQuery(updateQuery, "ERR");
+			print("After Execute Query");
+			print(executeQuery);
+		   if( executeQuery == "ERR" ) {
+			if(DEBUG){
+				print "***************ERROR in update**********************";
+			}
+			//return "";
+		}
+			print("Test666");
+		}
+		//CRM-1090 Reset Call Ends
 		if((isNull(oldLineType) OR oldLineType == "") AND line.assetDetails_line <> "" AND previouseLineType <> "" AND previouseLineType <> "add"){
             oldLineType = lineType;
 		} // CRM:1090 : End
@@ -924,9 +942,11 @@ for line in transactionLine {
                         ContractTerm = actualContractTerm;
                     }
 				}
-				// CRM-1280
+				// CRM-1280				
 				if(lineType == "renew" AND quoteType_temp <> "Auto-Renew" AND NOT(ISNULL(assetArray[CUST_SPOT_PROMOTION_INDEX])) AND assetArray[CUST_SPOT_PROMOTION_INDEX] <> ""){
 					lineRes = lineRes + documentNumber + "~spotDiscount_line~"+assetArray[CUST_SPOT_PROMOTION_INDEX]+"|";
+				}else{
+					lineRes = lineRes + documentNumber + "~spotDiscount_line~|";
 				}
 			}
 			elif(lineType <> "add")
@@ -1145,7 +1165,7 @@ for line in transactionLine {
 			}
 		}
 		// List Price Calcualtion for manual renewals when customer price info is available : CRM-1280
-		if(NOT(ISNULL(assetArray[CUST_LIST_PRICE])) AND isnumber(assetArray[CUST_LIST_PRICE]) AND lineType == "renew" AND quoteType_temp <> "Auto-Renew"){
+		if(NOT(ISNULL(assetArray[CUST_LIST_PRICE])) AND isnumber(assetArray[CUST_LIST_PRICE]) AND lineType == "renew" AND quoteType_temp <> "Auto-Renew" AND atof(assetArray[CUST_LIST_PRICE]) > 0){
 			listPrice = atof(assetArray[CUST_LIST_PRICE]);
 		}
 		
@@ -1748,8 +1768,9 @@ for line in transactionLine {
 						  //+ documentNumber + "~netPriceEach_line~" + string(netPriceEach) + "|"
 						  //+ documentNumber + "~extendedNetPrice_line~" + string(extendedNetPriceEach) + "|"
 			lineRes = lineRes + documentNumber + "~needManualRenew_line~" + string(needManualRenew) + "|"
-						  + documentNumber + "~checkInventory_l~" + string(checkInventory) + "|";
-
+						  + documentNumber + "~checkInventory_l~" + string(checkInventory) + "|"
+						  //CRM-1090
+						  + documentNumber + "~oldLineType_line~" + lineType + "|";
 						  //+ documentNumber + "~undersoldAsset_line~" + String(undersoldAsset) + "|";
 						  //+ documentNumber + "~priceEffectiveDate_line~" + priceEffDate + "|";
 						
@@ -2105,8 +2126,9 @@ for line in transactionLine {
 											}
 									//CRM-1280
 									if(lineType == "renew" AND quoteType_temp <> "Auto-Renew" AND NOT(ISNULL(assetArray[CUST_PROMOTION_INDEX])) AND promoCode == assetArray[CUST_PROMOTION_INDEX]){
-									 if(isnumber(assetArray[CUST_PROMOTION_INDEX_AGE])){
+									 if(isnumber(assetArray[CUST_PROMOTION_INDEX_AGE]) AND atof(assetArray[CUST_PROMOTION_INDEX_AGE]) > 0){									 
 										discountPercent = atof(assetArray[CUST_PROMOTION_INDEX_AGE]);
+										put(appliedPromotionDict,atoi(documentNumber),promoCode);										
 									 }
 									} 
 									eligiblePromotionString = eligiblePromotionString + promoCode + promoDelim + string(round(discountPercent,2)) + promoDelim + documentNumber + menuItemDelim ;
@@ -2125,8 +2147,9 @@ for line in transactionLine {
 											}
 									//CRM-1280
 									if(lineType == "renew" AND quoteType_temp <> "Auto-Renew" AND NOT(ISNULL(assetArray[CUST_PROMOTION_INDEX])) AND promoCode == assetArray[CUST_PROMOTION_INDEX]){
-									 if(isnumber(assetArray[CUST_PROMOTION_INDEX_AGE])){
+									 if(isnumber(assetArray[CUST_PROMOTION_INDEX_AGE]) AND atof(assetArray[CUST_PROMOTION_INDEX_AGE])>0){
 										discountPercent = atof(assetArray[CUST_PROMOTION_INDEX_AGE]);
+										put(appliedPromotionDict,atoi(documentNumber),promoCode);
 									 }
 									}									
 									if((promoCode <> "ADVANTAGECAPPEDPRICE" ) ){ // CRM-1526 : Start					
@@ -2162,14 +2185,12 @@ for line in transactionLine {
 											discountPercent = line.override_line;
 										}
 									}else{
-									//CRM-1280
-									if(lineType == "renew" AND NOT(ISNULL(assetArray[CUST_PROMOTION_INDEX])) AND promoCode == assetArray[CUST_PROMOTION_INDEX]){
-									   currentPromo = assetArray[CUST_PROMOTION_INDEX];	
-										if((promoCode == assetArray[CUST_PROMOTION_INDEX])){
-										if(isNumber(assetArray[CUST_PROMOTION_INDEX_AGE])){
-												discountPercent = atof(assetArray[CUST_PROMOTION_INDEX_AGE]);
-											}
-										}
+									//CRM-1280									
+									if(lineType == "renew" AND NOT(ISNULL(assetArray[CUST_PROMOTION_INDEX])) AND promoCode == assetArray[CUST_PROMOTION_INDEX] AND isNumber(assetArray[CUST_PROMOTION_INDEX_AGE]) AND atof(assetArray[CUST_PROMOTION_INDEX_AGE]) > 0){
+									    print "in if";
+										currentPromo = assetArray[CUST_PROMOTION_INDEX];																				
+										discountPercent = atof(assetArray[CUST_PROMOTION_INDEX_AGE]);
+																					
 									}else{
 										currentPromo = assetArray[PROMOTION_INDEX];	
 
@@ -2336,7 +2357,7 @@ for line in transactionLine {
 			lineRes = lineRes + documentNumber + "~override_line~" + string(promoPercentageForRenewal) + "|";
 		}
 		//CRM-1280
-		elif( lineType == "renew" AND NOT(ISNULL(assetArray[CUST_PROMOTION_INDEX])) AND assetArray[CUST_PROMOTION_INDEX] <>"" AND (_system_current_step_var=="start_step" OR _system_current_step_var=="pending_process")){
+		elif( lineType == "renew" AND NOT(ISNULL(assetArray[CUST_PROMOTION_INDEX])) AND assetArray[CUST_PROMOTION_INDEX] <>"" AND isNumber(assetArray[CUST_PROMOTION_INDEX_AGE]) AND atof(assetArray[CUST_PROMOTION_INDEX_AGE]) > 0 AND (_system_current_step_var=="start_step" OR _system_current_step_var=="pending_process")){
 			applied=assetArray[CUST_PROMOTION_INDEX];
 			resetAppliedPromoQuote = resetAppliedPromoQuote + documentNumber + ".!." + assetArray[CUST_PROMOTION_INDEX] + "!!!" ;
 		}elif(containsKey(appliedPromotionDict,atoi(documentNumber)) and applied <> ""){
@@ -2358,7 +2379,7 @@ for line in transactionLine {
 					}
 					//CRM-1280
 					elif(lineType == "renew" AND NOT(ISNULL(assetArray[CUST_PROMOTION_INDEX])) AND applied == assetArray[CUST_PROMOTION_INDEX]){
-						if(isNumber(assetArray[CUST_PROMOTION_INDEX_AGE])){
+						if(isNumber(assetArray[CUST_PROMOTION_INDEX_AGE]) AND atof(assetArray[CUST_PROMOTION_INDEX_AGE]) >0){
 							promotionDiscount = atof(assetArray[CUST_PROMOTION_INDEX_AGE]);
 						}
 					}
@@ -2808,9 +2829,13 @@ for line in transactionLine {
 						  //+ documentNumber + "~allowedContractTerm_line~" + contrctTermAllowed + "|";
 		
 		//CRM-1090 Start 
-		if(linetype == "renew" and linetype <> oldlinetype AND  quoteType_temp <> "Auto-Renew"){
-		   lineRes = lineRes + documentNumber + "~override_line~" + "0.0" + "|"; 
-		   lineRes = lineRes + documentNumber + "~listPriceOverride_line~" + "|";
+		/*if(linetype == "renew" and linetype <> oldlinetype AND  quoteType_temp <> "Auto-Renew"){
+		    
+			// CRM-1280
+			if(assetArray[CUST_PROMOTION_INDEX_AGE] == "" OR atof(assetArray[CUST_PROMOTION_INDEX_AGE]) == 0){
+			   lineRes = lineRes + documentNumber + "~override_line~" + "0.0" + "|"; 
+			}
+		   lineRes = lineRes + documentNumber + "~listPriceOverride_line~0" + "|";
 		   lineRes = lineRes + documentNumber + "~overrideTerm_line~" + "0" +"|";
 			lineRes = lineRes + documentNumber + "~contractTerms_line~" + string(contractTerm) + "|";		   
 		   	   
@@ -2833,7 +2858,7 @@ for line in transactionLine {
 			  lineRes = lineRes + documentNumber + "~eligiblePromotions_line~" + "|";
 			}
 		   
-		}
+		}*/
 		//CRM-1090 Ends
 	}
 	
