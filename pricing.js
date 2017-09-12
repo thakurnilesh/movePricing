@@ -109,7 +109,8 @@ OVERRIDE_TERM_INDEX = 33;
 LSIT_PRICE_OVERRIDE_INDEX = 42;
 OVERRIDER_CONTRACT_TERM_INDEX = 34;
 MANUAL_DISCOUNT_TYPE_INDEX = 36;
-											 
+MANUAL_DISCOUNT_AMOUNT_INDEX = 37; // CHECK IT HAS TO BE 36 AS PER ORIGINAL CODE// Replaced the variable MANUAL_DISCOUNT_TYPE_INDEX with MANUAL_DISCOUNT_AMOUNT_INDEX as 36 is for discount amount and not for type CRM: 1090
+//MANUAL_DISCOUNT_TYPE_INDEX = 37; // CRM: 1090											 
 ASSET_PRICE_EFFECTIVE_DATE_INDEX = 38;
 NEXT_CHARGE_DATE_INDEX = 43;
 TERM_END_DATE_INDEX = 46;
@@ -671,7 +672,7 @@ for line in transactionLine {
 	isSpecialAdvantage = false;
 	isGrandFatherPriceEligible = false;
     previouseLineType = "";//CRM-1280
-
+    amendPromoSelected = false;//CRM-1090
 	marketKey = "";
 	if(line.assetDetails_line <> "")
 	{
@@ -739,42 +740,6 @@ for line in transactionLine {
 		todayDateStr = split(todayDateTimeStr," ");
 		lineAddedDateStr = substring(line.createdDate_l, 0, find(line.createdDate_l, " "));	
         oldLineType = line.oldLineType_line; // CRM-1280
-		
-		/*print("Before Reset Call");
-		print("Line Discount");
-		print(line.override_line);
-		print("MPO");
-		print(line.listPriceOverride_line); 
-		print("Contract Term"); 
-		print(line.contractTerms_line);
-		print("Billing Period");
-		print(line.billingPeriod_line); 
-		//CRM-1090 Reset Call
-		if(linetype == "renew" and linetype <> oldlinetype AND  quoteType_temp <> "Auto-Renew"){
-			fields = string[][];
-			fields[0][0] = "quoteNumber_quote";
-			fields[0][1] = quoteNumber_quote;
-			updateQuery = util.generateSOAPUpdateTransactionQuery(_system_buyside_id, _system_user_session_id, fields, _system_supplier_company_name, "attributeReset");
-			executeQuery = util.executeSOAPQuery(updateQuery, "ERR");
-			print("After Execute Query");
-			print(executeQuery);
-		   if( executeQuery == "ERR" ) {
-			if(DEBUG){
-				print "***************ERROR in update**********************";
-			}
-			//return "";
-		}	
-		}
-		//CRM-1090 Reset Call Ends
-		print("After Reset Call");
-		print("Line Discount");
-		print(line.override_line);
-		print("MPO");
-		print(line.listPriceOverride_line); 
-		print("Contract Term"); 
-		print(line.contractTerms_line);
-		print("Billing Period");
-		print(line.billingPeriod_line); */
 		//CRM-1280 : Start
 		if((isNull(oldLineType) OR oldLineType == "") AND line.assetDetails_line <> "" AND previouseLineType <> "" AND previouseLineType <> "add"){
             oldLineType = lineType;
@@ -785,7 +750,7 @@ for line in transactionLine {
 
 
 		if(quoteType_quote == "Auto-Renew" AND lineType == "renew" AND getdiffindays(strtodate(lineAddedDateStr, "yyyy-MM-dd"),strtodate(todayDateStr[0], "MM/dd/yyyy")) > 0){
-			checkInventory = true;
+			checkInventory = true;			
 		}
 		if(line.externalID_line <> "" AND line._part_custom_field13 == "true" AND actionName == "update"){
 			price_tier = "";
@@ -863,18 +828,17 @@ for line in transactionLine {
 							undersoldAsset = true;
 						}
 					}
-				}*/
+				}*/	
+				if(quoteType_temp == "Auto-Renew" AND containsKey(thresholdDict,partNumber) AND ((marketSold > get(thresholdDict,partNumber)) OR (total_units == 0 AND total_units_unavailable > 0))){
+					needManualRenew = true;
+				}				
                 if(checkInventory == false){
                     checkInventory = true;
-					//CRM-1280 : Start
-					discountPer=(1-(line.extendedNetPrice_line/line.listPrice_line))*100;					
-					if(quoteType_temp == "Auto-Renew" AND lineType == "renew" AND containsKey(thresholdDict,partNumber) AND discountPer > get(thresholdDict,partNumber)){
-						needManualRenew = true;
-					}
+                    // Commmented below for 128 and added above					
 					/*if(quoteType_temp == "Auto-Renew" AND containsKey(thresholdDict,partNumber) AND ((marketSold > get(thresholdDict,partNumber)) OR (total_units == 0 AND total_units_unavailable > 0))){
 						needManualRenew = true;
 					}*/
-					//CRM-1280 : End
+					
                     if(containsKey(assetWebserviceData,"price_tier"))
                     {
                         price_tier = get(assetWebserviceData,"price_tier");
@@ -940,7 +904,7 @@ for line in transactionLine {
 		MarketBuilderFlag = false;// true if marketbuilder product
 		NarMembership = line.narMembership_line;
 		// reset imported values for assets from SFDC
-		if(line.assetDetails_line <> "")
+		      if(line.assetDetails_line <> "")
 		{
 		 print "test";
 			if(lineType == "renew" AND lineType <> oldLineType) //CRM-1280
@@ -958,14 +922,14 @@ for line in transactionLine {
 					contractTerm = atoi(assetArray[CUST_CONTRACT_TERM_INDEX]);
 					
 				}
-			/*	elif(line._part_custom_field22 <> "")// CRM-1090
+				elif(line._part_custom_field22 <> "")// CRM-1090
 				{					
 					eligibleContractTerm = atoi(line._part_custom_field22);					
 					actualContractTerm = eligibleContractTerm;					
 					if(line.overrideTerm_line == 0){
                         ContractTerm = actualContractTerm;
                     }
-				}*/
+				}
 				if (quoteType_temp <> "Auto-Renew" and lineType == "renew")
 			   {
 				   billingPeriod=assetArray[BILLING_PERIOD_INDEX];
@@ -982,17 +946,60 @@ for line in transactionLine {
 				   }
 				   lineRes = lineRes + documentNumber + "~billingPeriod_line~" + billingPeriod + "|";
 			   }
+			    // clear override term for non inventory renewals CRM-1090		  
+				if(line._part_custom_field13=="false"){
+				lineRes = lineRes + documentNumber + "~overrideTerm_line~0|";
+				}
 				// CRM-1280	
                  lineRes = lineRes + documentNumber + "~contractTerms_line~" + string(ContractTerm) + "|";				
 				if(lineType == "renew" AND quoteType_temp <> "Auto-Renew" AND NOT(ISNULL(assetArray[CUST_SPOT_PROMOTION_INDEX])) AND assetArray[CUST_SPOT_PROMOTION_INDEX] <> ""){
 					lineRes = lineRes + documentNumber + "~spotDiscount_line~"+assetArray[CUST_SPOT_PROMOTION_INDEX]+"|";
 				}
 			}
+			elif(lineType <> "renew" AND oldLineType == "renew") //CRM:1090 NT
+			{				
+				if(oldLineType == "renew")// if line action is changed from renew to amend etc then reset values from asset so user can change discount or any other value after changing line action to amend
+				{
+					//Added by Ravi CRM-1812
+					/*if (fieldsalesuserflag == "N")
+					{
+							lineRes = lineRes + documentNumber + "~commerceGroup_line~" + assetArray[COMMERCE_GROUP_INDEX] + "|";
+					}*/
+					if(assetArray[MANUAL_DISCOUNT_AMOUNT_INDEX] <> "" AND isNumber(assetArray[MANUAL_DISCOUNT_AMOUNT_INDEX])) // CRM:1090
+					{
+						
+						assetDicscount = atof(assetArray[MANUAL_DISCOUNT_AMOUNT_INDEX]); // CRM:1090
+						//if(assetDicscount < 0){
+						//	assetDicscount=assetDicscount*-1;
+						//}
+						assetDiscountType = assetArray[MANUAL_DISCOUNT_TYPE_INDEX];
+						lineDiscount = assetDicscount;
+						lineRes = lineRes + documentNumber + "~override_line~" + string(assetDicscount) + "|";
+						if(assetDiscountType == "Amt" OR assetDiscountType =="$"){
+							lineRes = lineRes + documentNumber + "~discountType_line~Amt|";
+						}else{
+							lineRes = lineRes + documentNumber + "~discountType_line~%|";
+						}
+						amendPromoSelected = true;
+
+					}
+					if(isNumber(assetArray[CONTRACT_TERM_INDEX])){
+						assetContractTerm = integer(atof(assetArray[CONTRACT_TERM_INDEX]));
+						lineRes = lineRes + documentNumber + "~contractTerms_line~" + string(assetContractTerm) + "|";
+						actualContractTerm = assetContractTerm;
+						/*Ticket# 1090: Added below line*/
+						ContractTerm = actualContractTerm;
+						//if(line.overrideTerm_line == 0){
+						//	ContractTerm = assetContractTerm;
+						//}
+					}
+				}
+			}
 			elif(lineType <> "add")
 			{
 			    // CRM-1280
 				//previouseLineType = getoldvalue("lineType_line",atoi(documentNumber));
-				if(oldLineType == "renew")// if line action is changed from renew to amend etc then reset values from asset so user can change discount or any other value after changing line action to amend
+				if(oldLineType == "renew" AND lineType <> "renew")// if line action is changed from renew to amend etc then reset values from asset so user can change discount or any other value after changing line action to amend
 				{
 					//Added by Ravi CRM-1812
 					if (fieldsalesuserflag == "N")
@@ -1018,7 +1025,8 @@ for line in transactionLine {
 				//CRM-1280
 				lineRes = lineRes + documentNumber + "~spotDiscount_line~|";
 			}
-			if(lineType == "buyout" OR lineType == "cancel"){
+			if(lineType == "buyout" OR lineType == "cancel" OR (lineType <> "renew" AND oldLineType == "renew")){//CRM-1090
+			//if(lineType == "buyout" OR lineType == "cancel"){
 				//assetArray 	= split(line.assetDetails_line, FIELD_DELIM);
 				listPriceOverride = 0;
 				//lineDiscount = 0;
@@ -1818,8 +1826,10 @@ for line in transactionLine {
 						  //+ documentNumber + "~totalDiscount2_line~" + string(totalDiscountLine) + "|"
 						  //+ documentNumber + "~totalValue_line~" + string(totalValueLine) + "|"
 						  //+ documentNumber + "~estTax_line~" + string(totalEstTaxLine) + "|";
-		
-		if(listPrice <> line.originalListPrice_line AND line.originalListPrice_line > 0)// reset over ride amount if user modified any line level attribute which causes change in original list price
+		//CRM-1090 NT updated if coniditon below
+		/*Ticket# 1090: Added NOT (lineType <> "renew" AND oldLineType == "renew") condition in the below if*/ 
+		if(listPrice <> line.originalListPrice_line AND (line.originalListPrice_line > 0 OR line._part_custom_field13=="false") AND NOT (lineType <> "renew" AND oldLineType == "renew"))// reset over ride amount if user modified any line level attribute which causes change in original list price
+		//if(listPrice <> line.originalListPrice_line AND line.originalListPrice_line > 0)// reset over ride amount if user modified any line level attribute which causes change in original list price
 		{
 			lineRes = lineRes + documentNumber + "~listPriceOverride_line~" + string(0) + "|";
 		}
@@ -1895,7 +1905,8 @@ for line in transactionLine {
 			isGrandFatherPriceEligible = true;
 			lineDetailsDict = Dict("string");
 			put(lineDetailsDict,"priceType",line._part_custom_field8);
-			put(lineDetailsDict,"listBillingPeriod",line.billingPeriod_line);
+			//put(lineDetailsDict,"listBillingPeriod",line.billingPeriod_line); //Commented as part of CRM-1090
+			put(lineDetailsDict,"listBillingPeriod",billingPeriod); //Added as part of CRM-1090
 			if(line.listPriceOverride_line <> 0){
 				put(lineDetailsDict,"listPrice",String(line.listPriceOverride_line));
 			}else{
@@ -2295,10 +2306,11 @@ for line in transactionLine {
 					currentPromo = assetArray[PROMOTION_INDEX];	
 					if(find(eligiblePromotionString,assetArray[PROMOTION_INDEX]+promoDelim) == -1 AND containsKey(promoApplicationdct,assetArray[PROMOTION_INDEX]+ "@PromoCode")){
 
-						grandFathered = get(promoApplicationdct, assetArray[PROMOTION_INDEX]+"@Grandfathered");
-						toDate = atoi(get(promoApplicationdct, assetArray[PROMOTION_INDEX]+"@DateTo")); 
+						//grandFathered = get(promoApplicationdct, assetArray[PROMOTION_INDEX]+"@Grandfathered"); //commented for CRM-1090
+						//toDate = atoi(get(promoApplicationdct, assetArray[PROMOTION_INDEX]+"@DateTo")); //commented for CRM-1090
 						//if((lower(line.lineType_line) == "amend") OR (lower(line.lineType_line) == "credit") OR (lower(line.lineType_line) == "renew" AND lower(grandFathered) == "yes")){
-						if((lineType == "amend") OR (lineType == "credit") OR (lineType == "renew" AND (undersoldAsset OR lower(grandFathered) == "yes") AND quoteType_temp <> "Auto-Renew")){ // commented above code and added undersoldAsset condition as part of CRM-427 so if undersoldAsset is true then promo code is valid from asset.
+						//if((lineType == "amend") OR (lineType == "credit") OR (lineType == "renew" AND (undersoldAsset OR lower(grandFathered) == "yes") AND quoteType_temp <> "Auto-Renew")) // commented above code and added undersoldAsset condition as part of CRM-427 so if undersoldAsset is true then promo code is valid from asset.
+						//{ 
 							if(containsKey(promoApplicationdct, currentPromo+"@DiscountPercent") AND isNumber(get(promoApplicationdct, currentPromo+"@DiscountPercent"))){
 									discountPercent = atof(get(promoApplicationdct,currentPromo+"@DiscountPercent"));
 							}elif(assetArray[MANUAL_DISCOUNT_TYPE_INDEX] <> "" AND isNumber(assetArray[MANUAL_DISCOUNT_TYPE_INDEX])){
@@ -2307,27 +2319,27 @@ for line in transactionLine {
 									discountPercent = 0;
 							}
 
-
-							tempPromoPercentageForRenewal = discountPercent;
+							//CRM-1090 commented below 
+							/*tempPromoPercentageForRenewal = discountPercent;
 							if(assetArray[INSTALL_DATE_INDEX] <> ""){
 								tempStartDate = replace(assetArray[INSTALL_DATE_INDEX],"-","");
 								if(isnumber(tempStartDate)){
 									tempPromoStartDateForRenewal = atoi(tempStartDate);
 								}
-							}
+							}*/
 
 
 
-							if((quoteType_temp == "Auto-Renew") AND lineType == "renew" AND ((tempPromoPercentageForRenewal > promoPercentageForRenewal) OR (promoPercentageForRenewal == 0) OR (tempPromoPercentageForRenewal == promoPercentageForRenewal AND tempPromoStartDateForRenewal > promoStartDateForRenewal)))
+							/*if((quoteType_temp == "Auto-Renew") AND lineType == "renew" AND ((tempPromoPercentageForRenewal > promoPercentageForRenewal) OR (promoPercentageForRenewal == 0) OR (tempPromoPercentageForRenewal == promoPercentageForRenewal AND tempPromoStartDateForRenewal > promoStartDateForRenewal)))
 							{
 
 								promoPercentageForRenewal = tempPromoPercentageForRenewal;
 								promoCodeForRenewal = assetArray[PROMOTION_INDEX];
 								promoStartDateForRenewal = tempPromoStartDateForRenewal;
-							}	
+							}	*/
 
 							eligiblePromotionString = eligiblePromotionString + assetArray[PROMOTION_INDEX] + promoDelim + string(round(discountPercent,2)) + promoDelim + documentNumber + menuItemDelim;
-						}
+						//}
 					}
 				}
 			}
@@ -2881,50 +2893,6 @@ for line in transactionLine {
 		}
 		lineRes = lineRes + documentNumber + "~assetStructure_line~" + assetStructure + "|";
 						  //+ documentNumber + "~allowedContractTerm_line~" + contrctTermAllowed + "|";
-		
-		//CRM-1090 Start 
-		/*if(linetype == "renew" and linetype <> oldlinetype AND  quoteType_temp <> "Auto-Renew"){
-		  	// CRM-1280
-			if(assetArray[CUST_PROMOTION_INDEX_AGE] == "" OR atof(assetArray[CUST_PROMOTION_INDEX_AGE]) == 0){
-			   lineRes = lineRes + documentNumber + "~override_line~" + "0.0" + "|"; 
-			}
-		   lineRes = lineRes + documentNumber + "~listPriceOverride_line~0" + "|";
-		   lineRes = lineRes + documentNumber + "~overrideTerm_line~" + "0" +"|";
-			lineRes = lineRes + documentNumber + "~contractTerms_line~" + string(contractTerm) + "|";		   
-		   	   
-		    billingPeriod=assetArray[BILLING_PERIOD_INDEX];
-				   if(billingPeriod <> "Monthly"){
-					   if(contractTerm == 12){
-							billingPeriod = "Annual";
-					   }elif(contractTerm == 6){
-							billingPeriod = "Bi-Annual";
-					   }elif(contractTerm == 3){
-							billingPeriod = "Quarterly";
-					   }else{
-							billingPeriod = "Monthly";
-					   }
-				  }
-		    lineRes = lineRes + documentNumber + "~billingPeriod_line~" + billingPeriod + "|";
-		  
-		   if(isGrandFatherPriceEligible == true )
-			{
-			  lineRes = lineRes + documentNumber + "~eligiblePromotions_line~" + "|";
-			}
-						fields = string[][];
-			fields[0][0] = "quoteNumber_quote";
-			fields[0][1] = quoteNumber_quote;
-			updateQuery = util.generateSOAPUpdateTransactionQuery(_system_buyside_id, _system_user_session_id, fields, _system_supplier_company_name, "cleanSave_t");
-			executeQuery = util.executeSOAPQuery(updateQuery, "ERR");
-			print("After Execute Query");
-			print(executeQuery);
-		   if( executeQuery == "ERR" ) {
-			if(DEBUG){
-				print "***************ERROR in update**********************";
-			}
-            }
-		   
-		}*/
-		//CRM-1090 Ends
 	}
 	
 	//Strategic Discount
