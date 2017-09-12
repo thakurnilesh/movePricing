@@ -2381,8 +2381,10 @@ for line in transactionLine {
 				}
 			}
 
-
-
+            //CRM-1090 NT
+            if(line.assetDetails_line <> "" AND lineType <> "add" AND lineType <> "renew" AND oldLineType == "renew" AND assetArray[PROMOTION_INDEX] <> ""){
+                put(appliedPromotionDict,atoi(documentNumber),assetArray[PROMOTION_INDEX]);
+            }// End CRM-1090
 
 		}
 		/* if(containsKey(appliedPromotionDict,atoi(documentNumber))){
@@ -2411,9 +2413,14 @@ for line in transactionLine {
 			promoInAppliedQuoteString = get(AppliedPromotionDict, atoi(documentNumber));			
 			if(findinarray(uniquePromosArray,promoInAppliedQuoteString) <> -1){
 				applied = promoInAppliedQuoteString;
-			}elif(_system_current_step_var=="start_step" OR _system_current_step_var=="pending_process"){
-				lineRes = lineRes + documentNumber + "~override_line~" + "" + "|";
 			}
+			/*elif(_system_current_step_var=="start_step" OR _system_current_step_var=="pending_process")
+			{
+				lineRes = lineRes + documentNumber + "~override_line~" + "" + "|";
+			}*/
+			elif((_system_current_step_var=="start_step" OR _system_current_step_var=="pending_process") AND amendPromoSelected == false){//CRM-1090
+				lineRes = lineRes + documentNumber + "~override_line~" + "0.0" + "|";
+		        }
 		}
 		//if((quoteType_temp == "Auto-Renew") AND lineType == "renew" AND (_system_current_step_var=="start_step" OR _system_current_step_var=="pending_process"))
 		//CRM-1280

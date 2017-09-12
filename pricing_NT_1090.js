@@ -670,13 +670,13 @@ for line in transactionLine {
 	overrideDelta = 0.0;
 	isSpecialAdvantage = false;
 	isGrandFatherPriceEligible = false;
-    previouseLineType = "";//CRM-1090
+    previouseLineType = "";//CRM-1280,1090
     amendPromoSelected = false;//CRM-1090 NT
 	marketKey = "";
 	if(line.assetDetails_line <> "")
 	{
 		assetArray 	= split(line.assetDetails_line, FIELD_DELIM);
-        previouseLineType = getoldvalue("lineType_line",atoi(documentNumber)); //CRM-1090
+        previouseLineType = getoldvalue("lineType_line",atoi(documentNumber)); //CRM-1280,1090
 		marketKey = assetArray[MARKET_KEY_INDEX];
 	}
 	//print dependantPart;
